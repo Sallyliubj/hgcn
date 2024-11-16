@@ -8,13 +8,19 @@ import numpy as np
 import scipy.sparse as sp
 import torch
 
+from utils.tree.load_parameters import generate_data
 
 def load_data(args, datapath):
     if args.task == 'nc':
         data = load_data_nc(args.dataset, args.use_feats, datapath, args.split_seed)
     else:
-        data = load_data_lp(args.dataset, args.use_feats, datapath)
-        adj = data['adj_train']
+        if args.dataset == 'inference':
+            adj, features = generate_data(n_leaves=200, alpha = 0.1)
+            data = {'adj_train': adj, 'features': features}
+        else:
+            data = load_data_lp(args.dataset, args.use_feats, datapath)
+            adj = data['adj_train']
+        
         if args.task == 'lp':
             adj_train, train_edges, train_edges_false, val_edges, val_edges_false, test_edges, test_edges_false = mask_edges(
                     adj, args.val_prop, args.test_prop, args.split_seed
@@ -28,6 +34,8 @@ def load_data(args, datapath):
     )
     if args.dataset == 'airport':
         data['features'] = augment(data['adj_train'], data['features'])
+
+    print(data.items())
     return data
 
 
@@ -49,7 +57,7 @@ def process(adj, features, normalize_adj, normalize_feats):
 def normalize(mx):
     """Row-normalize sparse matrix."""
     rowsum = np.array(mx.sum(1))
-    r_inv = np.power(rowsum, -1).flatten()
+    r_inv = np.power(rowsum.astype(float), -1).flatten()
     r_inv[np.isinf(r_inv)] = 0.
     r_mat_inv = sp.diags(r_inv)
     mx = r_mat_inv.dot(mx)
