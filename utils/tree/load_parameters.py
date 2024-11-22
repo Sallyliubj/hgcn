@@ -1,6 +1,7 @@
 from utils.tree.data_utils import simulate_seq
 from utils.tree.tree_utils import create_tree
 from utils.tree.substitution_models import JukesCantor
+from utils.tree import sem
 import numpy as np
 import networkx as nx
 import scipy.sparse as sp
@@ -83,18 +84,18 @@ def build_weighted_adjacency_matrix(one_hot_sequences, model):
     
     return np.exp(adjacency_matrix)
 
-def generate_node_features(n_leaves=20, alpha=0.1):
-    tree, opt = create_tree(n_leaves, scale=0.1)
+def generate_node_features(n_leaves, alpha=0.1):
+    # tree, opt = create_tree(n_leaves, scale=0.1)
+    tree,opt = sem.randomt_tree(n_leaves=n_leaves, scale=0.1)
     evo_model = JukesCantor(alpha=alpha)
-    sim_seq, prob = simulate_seq(tree, evo_model, ndata=10)
+    sim_seq = simulate_seq(tree, evo_model, len(tree))
     encoded_seq = one_hot(sim_seq)
     
     features_reduced = np.argmax(encoded_seq, axis=-1)
+    return features_reduced, opt
 
-    return features_reduced
 
-
-def generate_weighted_adj_matrix(n_leaves=20, alpha = 0.1):
+def generate_weighted_adj_matrix(n_leaves, alpha = 0.1):
     """
     Generate weight adjancy matrix and one-hot encoded sequences
     
@@ -103,16 +104,16 @@ def generate_weighted_adj_matrix(n_leaves=20, alpha = 0.1):
         adj_matrix: numpy.array
         encoded_seq: numpy.array
     """
-    encoded_seq = generate_node_features(n_leaves=n_leaves, alpha=alpha)
+    encoded_seq, opt = generate_node_features(n_leaves=n_leaves, alpha=alpha)
 
     model = JukesCantor(alpha)
     
     weighted_adj_matrix = build_weighted_adjacency_matrix(encoded_seq, model)
 
-    return weighted_adj_matrix
+    return weighted_adj_matrix, opt
 
 
-def get_mst(weighted_adj_matrix):
+def get_mst(weighted_adj_matrix, t_opts):
     # W is a symmetric (2N - 1)x(2N - 1) matrix with MI entries. Last entry is link connection to root.
     G = nx.Graph()
     W = weighted_adj_matrix
@@ -124,8 +125,8 @@ def get_mst(weighted_adj_matrix):
             if (W[i, j] == -np.inf):
                 continue
 
-            # t = t_opts[i, j]  # nx.shortest_path_length(tree, i, j, weight='t')
-            G.add_edge(i, j, weight=W[i, j])
+            t = t_opts[i, j]  # nx.shortest_path_length(tree, i, j, weight='t')
+            G.add_edge(i, j, weight=W[i, j], t = t)
     
     mst = nx.maximum_spanning_tree(G)
   
@@ -134,9 +135,11 @@ def get_mst(weighted_adj_matrix):
 
 def generate_unweighted_adj_matrix(mst, num_nodes):
     edges = np.array(list(mst.edges)).T 
+    print(edges.shape)
     # initialize an n_nodes x n_nodes adjacency matrix with zeros
     adj_matrix = np.zeros((num_nodes, num_nodes), dtype=int)
-
+    print("Adjacency matrix shape:", adj_matrix.shape)
+    
     # populate the adjacency matrix based on edge_index
     for i in range(edges.shape[1]):
         u, v = edges[0, i], edges[1, i]
@@ -146,17 +149,45 @@ def generate_unweighted_adj_matrix(mst, num_nodes):
     return adj_matrix
 
 
-def generate_data(n_leaves=200, alpha=0.1):
-    node_features = generate_node_features(n_leaves=n_leaves, alpha=alpha)
-    weighted_adj_matrix = generate_weighted_adj_matrix(n_leaves=n_leaves, alpha=alpha)
-    mst = get_mst(weighted_adj_matrix)
+# def generate_data(n_leaves=20, alpha=0.1):
 
-    adj_matrix = generate_unweighted_adj_matrix(mst, num_nodes=n_leaves)
+#     node_features, t_opts = generate_node_features(n_leaves=n_leaves, alpha=alpha)
+#     weighted_adj_matrix, t_opts = generate_weighted_adj_matrix(n_leaves=n_leaves, alpha=alpha)
+#     mst = get_mst(weighted_adj_matrix, t_opts)
+#     adj_matrix = generate_unweighted_adj_matrix(mst, num_nodes=node_features.shape[0])
 
-    if node_features.shape[0] != adj_matrix.shape[0]:
-        print("Inconsistant shape between node_features and adjancy matrix.")
+#     if node_features.shape[0] != adj_matrix.shape[0]:
+#         print("Inconsistant shape between node_features and adjancy matrix.")
 
-    if adj_matrix.shape[0] != adj_matrix.shape[1]:
-        print("Invalid adjancy matrix.")
+#     if adj_matrix.shape[0] != adj_matrix.shape[1]:
+#         print("Invalid adjancy matrix.")
 
-    return sp.csr_matrix(adj_matrix), node_features
+#     return sp.csr_matrix(adj_matrix), node_features
+
+
+def generate_data(n_leaves, alpha=0.1):
+    # generate a tree
+    tree, opt = sem.randomt_tree(n_leaves=n_leaves, scale=0.1)
+    # generate node features
+    evo_model = JukesCantor(alpha=alpha)
+    sim_seq = simulate_seq(tree, evo_model, len(tree))
+    encoded_seq = one_hot(sim_seq)
+    features_reduced = np.argmax(encoded_seq, axis=-1)
+
+    #adjancy matrix
+    adj_matrix_sparse = nx.adjacency_matrix(tree)
+    adj_matrix = adj_matrix_sparse.toarray()
+
+    #labels for node (root:0, leaf:1, internal:2)
+    type_to_label = {
+    'root': 0,
+    'leaf': 1,
+    'internal': 2}
+
+    labels = []
+    for node in tree.nodes:
+        node_type = tree.nodes[node]['type']
+        labels.append(type_to_label[node_type])
+    labels = np.array(labels)
+
+    return sp.csr_matrix(adj_matrix), features_reduced, labels, opt

@@ -15,8 +15,8 @@ def load_data(args, datapath):
         data = load_data_nc(args.dataset, args.use_feats, datapath, args.split_seed)
     else:
         if args.dataset == 'inference':
-            adj, features = generate_data(n_leaves=200, alpha = 0.1)
-            data = {'adj_train': adj, 'features': features}
+            adj, features, labels, opts = generate_data(n_leaves=100, alpha = 0.1)
+            data = {'adj_train': adj, 'features': features, 'labels': labels, 'opts': opts}
         else:
             data = load_data_lp(args.dataset, args.use_feats, datapath)
             adj = data['adj_train']
@@ -166,6 +166,9 @@ def load_data_nc(dataset, use_feats, data_path, split_seed):
         elif dataset == 'airport':
             adj, features, labels = load_data_airport(dataset, data_path, return_label=True)
             val_prop, test_prop = 0.15, 0.15
+        elif dataset == 'inference':
+            adj, features, labels = generate_data(n_leaves=100, alpha = 0.1)
+            val_prop, test_prop = 0.10, 0.10
         else:
             raise FileNotFoundError('Dataset {} is not supported.'.format(dataset))
         idx_val, idx_test, idx_train = split_data(labels, val_prop, test_prop, seed=split_seed)

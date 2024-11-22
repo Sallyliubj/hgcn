@@ -7,6 +7,7 @@ import logging
 import os
 import pickle
 import time
+import csv
 
 import numpy as np
 import optimizers
@@ -46,6 +47,7 @@ def train(args):
 
     # Load data
     data = load_data(args, os.path.join(os.environ['DATAPATH'], args.dataset))
+
     args.n_nodes, args.feat_dim = data['features'].shape
     if args.task == 'nc':
         Model = NCModel
@@ -66,6 +68,11 @@ def train(args):
 
     # Model and optimizer
     model = Model(args)
+    print(f'args:{args}')
+    
+    # with open('args.pkl', 'wb') as f:
+    #     pickle.dump(args, f)
+    
     logging.info(str(model))
     optimizer = getattr(optimizers, args.optimizer)(params=model.parameters(), lr=args.lr,
                                                     weight_decay=args.weight_decay)
@@ -119,6 +126,24 @@ def train(args):
                 best_emb = embeddings.cpu()
                 if args.save:
                     np.save(os.path.join(save_dir, 'embeddings.npy'), best_emb.detach().numpy())
+                    # save args
+                    args_path = os.path.join(save_dir, 'args.pkl', allow_pickle=True)
+                    with open(args_path, 'wb') as f:
+                        pickle.dump(args, f)
+                    # save features
+                    feats_path = os.path.join(save_dir, 'feats.npz')
+                    np.savez(feats_path, features=data["features"])
+                    #save labels
+                    label_path = os.path.join(save_dir, 'labels.txt')
+                    np.savetxt(label_path, data["labels"], fmt='%d')
+                    #save adjancy matrix
+                    adj_path = os.path.join(save_dir, 'adj_matrix.npy')
+                    np.save(adj_path,  data["adj_train"])
+                    # save opts
+                    opt_file_path = os.path.join(save_dir, "opt.txt")
+                    np.savetxt(opt_file_path, data["opts"], fmt='%d')
+                
+  
                 best_val_metrics = val_metrics
                 counter = 0
             else:
@@ -135,6 +160,7 @@ def train(args):
         best_test_metrics = model.compute_metrics(best_emb, data, 'test')
     logging.info(" ".join(["Val set results:", format_metrics(best_val_metrics, 'val')]))
     logging.info(" ".join(["Test set results:", format_metrics(best_test_metrics, 'test')]))
+    
     if args.save:
         np.save(os.path.join(save_dir, 'embeddings.npy'), best_emb.cpu().detach().numpy())
         if hasattr(model.encoder, 'att_adj'):

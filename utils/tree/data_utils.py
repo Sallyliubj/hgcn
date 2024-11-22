@@ -42,6 +42,34 @@ def parse_data(name='infile'):
 
     return sequences, num_sequences, len_sequences
 
+# def simulate_seq(tree, evo_model, ndata=10):
+#     """simulate sequences given the tree topology and rate matrices"""
+
+#     n_nodes = len(tree)
+#     root = n_nodes - 1
+#     n_leaves = (n_nodes + 1) // 2
+#     pt_matrix = [np.zeros((4, 4)) for i in range(2 * n_leaves - 2)]
+
+#     # do postorder tree traversal to compute the transition matrices
+#     for node in nx.dfs_postorder_nodes(tree, root):
+#         if not tree.nodes[node]['type'] == 'root':
+#             t = tree.nodes[node]['t']
+#             pt_matrix[node] = evo_model.trans_matrix(t)
+
+#     simuData = []
+#     status = [''] * (2 * n_leaves - 1)
+#     for run in range(ndata):
+#         for node in nx.dfs_preorder_nodes(tree, root):
+#             if tree.nodes[node]['type'] == 'root':
+#                 status[node] = np.random.choice(4, size=1, p=evo_model.stat_prob)[0]
+#             else:
+#                 parent = tree.nodes[node]['parent']
+#                 status[node] = np.random.choice(4, size=1, p=pt_matrix[node][status[parent]])[0]
+
+#         simuData.append([nuc_names[i] for i in status[:n_leaves]])
+
+#     return np.transpose(simuData)
+
 
 # simulate sequences given the tree topology and rate matrices
 def simulate_seq(tree, evo_model, ndata=10):
