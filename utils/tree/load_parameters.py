@@ -1,4 +1,4 @@
-from utils.tree.data_utils import simulate_seq
+from utils.tree.data_utils import simulate_seq, simulate_seq_all
 from utils.tree.tree_utils import create_tree
 from utils.tree.substitution_models import JukesCantor
 from utils.tree import sem
@@ -12,6 +12,9 @@ bases ={'A': 0, 'C': 1, 'G': 2, 'T':3 }
 
 
 def one_hot(sequences):
+    # print(f'sequences: {sequences}')
+    # print(f'type: {type(sequences)}')
+    bases ={'A': 0, 'C': 1, 'G': 2, 'T':3 }
     max_length = max(len(seq) for seq in sequences)
     
     # Initialize the one-hot encoded array with zeros
@@ -19,6 +22,8 @@ def one_hot(sequences):
     
     for i, seq in enumerate(sequences):
         for j, nucleotide in enumerate(seq):
+            # print(f'nucleotide: {nucleotide}')
+            # print(f'type: {type(nucleotide)}')
             if nucleotide in bases:
                 encoded[i, j, bases[nucleotide]] = 1
     
@@ -164,20 +169,7 @@ def generate_unweighted_adj_matrix(mst, num_nodes):
 
 #     return sp.csr_matrix(adj_matrix), node_features
 
-
-def generate_data(n_leaves, alpha=0.1):
-    # generate a tree
-    tree, opt = sem.randomt_tree(n_leaves=n_leaves, scale=0.1)
-    # generate node features
-    evo_model = JukesCantor(alpha=alpha)
-    sim_seq = simulate_seq(tree, evo_model, len(tree))
-    encoded_seq = one_hot(sim_seq)
-    features_reduced = np.argmax(encoded_seq, axis=-1)
-
-    #adjancy matrix
-    adj_matrix_sparse = nx.adjacency_matrix(tree)
-    adj_matrix = adj_matrix_sparse.toarray()
-
+def get_labels(tree):
     #labels for node (root:0, leaf:1, internal:2)
     type_to_label = {
     'root': 0,
@@ -189,5 +181,26 @@ def generate_data(n_leaves, alpha=0.1):
         node_type = tree.nodes[node]['type']
         labels.append(type_to_label[node_type])
     labels = np.array(labels)
+
+    return labels
+
+def generate_data(n_leaves, n_features,  alpha=0.1):
+    # generate a tree
+    tree, opt = sem.randomt_tree(n_leaves=n_leaves, scale=0.1)
+    # generate node features
+    evo_model = JukesCantor(alpha=alpha)
+    sim_seq = simulate_seq_all(tree, evo_model, n_features)
+    print(f'sim_seq shape: {sim_seq.shape}')
+
+    encoded_seq = one_hot(sim_seq)
+    features_reduced = np.argmax(encoded_seq, axis=-1)
+    print(f'features shape: {features_reduced.shape}')
+
+    #adjancy matrix
+    adj_matrix_sparse = nx.adjacency_matrix(tree)
+    adj_matrix = adj_matrix_sparse.toarray()
+    print(f'adj matrix shape: {adj_matrix.shape}')
+    
+    labels = get_labels(tree)
 
     return sp.csr_matrix(adj_matrix), features_reduced, labels, opt

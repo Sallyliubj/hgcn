@@ -20,7 +20,7 @@ class BaseModel(nn.Module):
     """
 
     def __init__(self, args):
-        super(BaseModel, self).__init__()
+        super().__init__()
         self.manifold_name = args.manifold
         if args.c is not None:
             self.c = torch.tensor([args.c])
@@ -95,7 +95,7 @@ class LPModel(BaseModel):
     """
 
     def __init__(self, args):
-        super(LPModel, self).__init__(args)
+        super().__init__(args)
         self.dc = FermiDiracDecoder(r=args.r, t=args.t)
         self.nb_false_edges = args.nb_false_edges
         self.nb_edges = args.nb_edges
@@ -111,9 +111,18 @@ class LPModel(BaseModel):
 
     def compute_metrics(self, embeddings, data, split):
         if split == 'train':
-            edges_false = data[f'{split}_edges_false'][np.random.randint(0, self.nb_false_edges, self.nb_edges)]
+            # edges_false = data[f'{split}_edges_false'][np.random.randint(0, self.nb_false_edges, self.nb_edges)]
+            # Make sure we do not request more edges than are available
+            available_false_edges = len(data[f'{split}_edges_false'])
+            if self.nb_edges > available_false_edges:
+                sampled_indices = np.random.randint(0, available_false_edges, available_false_edges)
+            else:
+                sampled_indices = np.random.randint(0, available_false_edges, self.nb_edges)
+            edges_false = data[f'{split}_edges_false'][sampled_indices]
+        
         else:
             edges_false = data[f'{split}_edges_false']
+            
         pos_scores = self.decode(embeddings, data[f'{split}_edges'])
         # print(f'pos_scores: {len(pos_scores)}') #debug
         neg_scores = self.decode(embeddings, edges_false)

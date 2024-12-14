@@ -1,6 +1,7 @@
 """Euclidean manifold."""
 
 from manifolds.base import Manifold
+import torch
 
 
 class Euclidean(Manifold):
@@ -9,13 +10,13 @@ class Euclidean(Manifold):
     """
 
     def __init__(self):
-        super(Euclidean, self).__init__()
+        super().__init__()
         self.name = 'Euclidean'
 
     def normalize(self, p):
         dim = p.size(-1)
-        p.view(-1, dim).renorm_(2, 0, 1.)
-        return p
+        # p.view(-1, dim).renorm_(2, 0, 1.)
+        return p.view(-1, dim).renorm(2, 0, 1.)  # Removed in-place operation
 
     def sqdist(self, p1, p2, c):
         return (p1 - p2).pow(2).sum(dim=-1)
@@ -52,7 +53,9 @@ class Euclidean(Manifold):
         return mx
 
     def init_weights(self, w, c, irange=1e-5):
-        w.data.uniform_(-irange, irange)
+        # w.data.uniform_(-irange, irange)
+        distribution = torch.distributions.Uniform(-irange, irange)
+        w = distribution.sample(w.shape)
         return w
 
     def inner(self, p, c, u, v=None, keepdim=False):
