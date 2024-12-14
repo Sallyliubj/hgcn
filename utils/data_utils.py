@@ -2,19 +2,49 @@
 import os
 import pickle as pkl
 import sys
+import re
 
 import networkx as nx
 import numpy as np
 import scipy.sparse as sp
 import torch
 
+from utils.tree.load_parameters import generate_data
+
+
+def load_inference_data(adj, features, labels, opts, args):
+    data = {}
+    adj_train, train_edges, train_edges_false, val_edges, val_edges_false, test_edges, test_edges_false = mask_edges(
+            adj, args.val_prop, args.test_prop, args.split_seed
+    )
+    data['features'] = features
+    data['labels'] = labels
+    data['opts'] = opts
+
+    data['adj_train'] = adj_train
+    data['train_edges'], data['train_edges_false'] = train_edges, train_edges_false
+    data['val_edges'], data['val_edges_false'] = val_edges, val_edges_false
+    data['test_edges'], data['test_edges_false'] = test_edges, test_edges_false
+    data['adj_train_norm'], data['features'] = process(
+    data['adj_train'], data['features'], args.normalize_adj, args.normalize_feats)
+
+    print(data.keys())
+    return data
+
 
 def load_data(args, datapath):
     if args.task == 'nc':
         data = load_data_nc(args.dataset, args.use_feats, datapath, args.split_seed)
     else:
-        data = load_data_lp(args.dataset, args.use_feats, datapath)
-        adj = data['adj_train']
+        if args.dataset == 'inference':
+            adj, features, labels, opts = generate_data(n_leaves=50, alpha = 0.1)
+            data = {'adj_train': adj, 'features': features, 'labels': labels, 'opts': opts}
+            print(f'data[opts]: {opts}')
+            print(f'data[opts] shape: {opts.shape}')
+        else:
+            data = load_data_lp(args.dataset, args.use_feats, datapath)
+            adj = data['adj_train']
+        
         if args.task == 'lp':
             adj_train, train_edges, train_edges_false, val_edges, val_edges_false, test_edges, test_edges_false = mask_edges(
                     adj, args.val_prop, args.test_prop, args.split_seed
@@ -28,6 +58,8 @@ def load_data(args, datapath):
     )
     if args.dataset == 'airport':
         data['features'] = augment(data['adj_train'], data['features'])
+
+    # print(data.items())
     return data
 
 
@@ -49,7 +81,7 @@ def process(adj, features, normalize_adj, normalize_feats):
 def normalize(mx):
     """Row-normalize sparse matrix."""
     rowsum = np.array(mx.sum(1))
-    r_inv = np.power(rowsum, -1).flatten()
+    r_inv = np.power(rowsum.astype(float), -1).flatten()
     r_inv[np.isinf(r_inv)] = 0.
     r_mat_inv = sp.diags(r_inv)
     mx = r_mat_inv.dot(mx)
@@ -158,6 +190,9 @@ def load_data_nc(dataset, use_feats, data_path, split_seed):
         elif dataset == 'airport':
             adj, features, labels = load_data_airport(dataset, data_path, return_label=True)
             val_prop, test_prop = 0.15, 0.15
+        elif dataset == 'inference':
+            adj, features, labels = generate_data(n_leaves=100, alpha = 0.1)
+            val_prop, test_prop = 0.10, 0.10
         else:
             raise FileNotFoundError('Dataset {} is not supported.'.format(dataset))
         idx_val, idx_test, idx_train = split_data(labels, val_prop, test_prop, seed=split_seed)
@@ -254,3 +289,46 @@ def load_data_airport(dataset_str, data_path, return_label=False):
     else:
         return sp.csr_matrix(adj), features
 
+
+def clean_and_process_nexus(filepath):
+    # Read the Nexus file manually
+    with open(filepath, 'r') as file:
+        lines = file.readlines()
+    
+    # Extract sequences from the MATRIX block
+    matrix_start = False
+    sequences = {}
+    for line in lines:
+        if line.strip().upper() == "MATRIX":
+            matrix_start = True
+            continue
+        if matrix_start:
+            if line.strip() == ";":
+                break
+            parts = line.strip().split()
+            if len(parts) >= 2:
+                taxon, seq = parts[0], ''.join(parts[1:])
+                sequences[taxon] = seq
+    
+    # Clean sequences: Remove special characters and illegal Nexus symbols
+    cleaned_sequences = {
+        taxon: re.sub(r'[{}\-?]', '', seq)
+        for taxon, seq in sequences.items()
+    }
+    
+    # Find the minimum sequence length after cleaning
+    min_length = min(len(seq) for seq in cleaned_sequences.values())
+    
+    # Truncate all sequences to the minimum length
+    truncated_sequences = {
+        taxon: seq[:min_length]
+        for taxon, seq in cleaned_sequences.items()
+    }
+    
+    # Convert to a 2D NumPy array
+    sequence_array = np.array(
+        [list(seq) for seq in truncated_sequences.values()],
+        dtype='U1'
+    )
+    
+    return sequence_array[1:]
